@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, datetime
 
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
@@ -111,3 +112,70 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# ---------------------------------------------------------------------------
+# WorkLog Payment Dashboard domain models
+# ---------------------------------------------------------------------------
+
+
+class Freelancer(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    full_name: str = Field(max_length=255)
+    email: str = Field(unique=True, index=True, max_length=255)
+    hourly_rate: float
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    worklogs: list["WorkLog"] = Relationship(back_populates="freelancer")
+
+
+class Task(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    title: str = Field(max_length=255)
+    description: str = Field(max_length=1024)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    worklogs: list["WorkLog"] = Relationship(back_populates="task")
+
+
+class WorkLog(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    freelancer_id: uuid.UUID = Field(foreign_key="freelancer.id", index=True)
+    task_id: uuid.UUID = Field(foreign_key="task.id", index=True)
+    status: str = Field(default="pending", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    freelancer: Freelancer | None = Relationship(back_populates="worklogs")
+    task: Task | None = Relationship(back_populates="worklogs")
+    time_entries: list["TimeEntry"] = Relationship(back_populates="worklog")
+    payment_worklogs: list["PaymentWorkLog"] = Relationship(back_populates="worklog")
+
+
+class TimeEntry(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    worklog_id: uuid.UUID = Field(foreign_key="worklog.id", index=True)
+    date: date
+    hours: float
+    description: str = Field(max_length=1024)
+    hourly_rate: float
+
+    worklog: WorkLog | None = Relationship(back_populates="time_entries")
+
+
+class Payment(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    status: str = Field(default="pending", index=True)
+    total_amount: float
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    payment_worklogs: list["PaymentWorkLog"] = Relationship(back_populates="payment")
+
+
+class PaymentWorkLog(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    payment_id: uuid.UUID = Field(foreign_key="payment.id", index=True)
+    worklog_id: uuid.UUID = Field(foreign_key="worklog.id", index=True)
+
+    payment: Payment | None = Relationship(back_populates="payment_worklogs")
+    worklog: WorkLog | None = Relationship(back_populates="payment_worklogs")
